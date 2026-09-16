@@ -29,6 +29,77 @@ const particleData = [
 
 let particles = [];
 
+// ---------- Background music toggle ----------
+const bgMusic = document.getElementById('bgMusic');
+let musicPlaying = false;
+
+function toggleMusic() {
+  const btn = document.getElementById('musicBtn');
+  if (!bgMusic) return;
+
+  if (musicPlaying) {
+    bgMusic.pause();
+    musicPlaying = false;
+    if (btn) btn.textContent = '🔈 Music';
+  } else {
+    bgMusic.play().catch(e => console.warn('Music playback failed (file missing or blocked):', e));
+    musicPlaying = true;
+    if (btn) btn.textContent = '🔇 Mute';
+  }
+}
+
+// ---------- Sound effects (Web Audio API, no external files needed) ----------
+let audioCtx = null;
+function getAudioCtx() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  // Some browsers start contexts suspended until a user gesture; resume defensively.
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+function playTone(freq, startTime, duration, type = 'sine', gainPeak = 0.25) {
+  const ac = getAudioCtx();
+  const osc = ac.createOscillator();
+  const gain = ac.createGain();
+  osc.type = type;
+  osc.frequency.value = freq;
+  osc.connect(gain);
+  gain.connect(ac.destination);
+
+  gain.gain.setValueAtTime(0, startTime);
+  gain.gain.linearRampToValueAtTime(gainPeak, startTime + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+  osc.start(startTime);
+  osc.stop(startTime + duration + 0.02);
+}
+
+function playCorrectSound() {
+  try {
+    const ac = getAudioCtx();
+    const now = ac.currentTime;
+    // Bright ascending two-note chime
+    playTone(523.25, now, 0.15, 'triangle');        // C5
+    playTone(783.99, now + 0.12, 0.25, 'triangle');  // G5
+  } catch (e) {
+    console.warn('Audio playback failed:', e);
+  }
+}
+
+function playWrongSound() {
+  try {
+    const ac = getAudioCtx();
+    const now = ac.currentTime;
+    // Low descending buzz
+    playTone(220, now, 0.18, 'sawtooth', 0.15);
+    playTone(160, now + 0.12, 0.22, 'sawtooth', 0.15);
+  } catch (e) {
+    console.warn('Audio playback failed:', e);
+  }
+}
+
 // Shuffle
 function shuffle(array) {
   for (let i = array.length - 1; i > 0; i--) {
@@ -46,6 +117,14 @@ function resetParticles() {
     x: slotWidth * (1.2 + i),
     y: canvas.height * 0.82
   }));
+}
+
+// Puts a particle back into the pool row (used when a filled slot gets overwritten)
+function returnToPool(item) {
+  const slotWidth = canvas.width / 7;
+  const x = slotWidth * (1.2 + particles.length);
+  const y = canvas.height * 0.82;
+  particles.push({ text: item.text, color: item.color, x, y });
 }
 
 function getScaledValues() {
@@ -77,7 +156,7 @@ function draw() {
     else if (n.status === 'wrong') ctx.strokeStyle = "#dc3545";
     else if (n.placed) ctx.strokeStyle = "#4caf50";
     else ctx.strokeStyle = "#666";
-    
+
     ctx.lineWidth = 4;
     ctx.strokeRect(x, y, s.slotW, s.slotH);
 
@@ -123,9 +202,15 @@ function getMousePos(e) {
 function startDrag(e) {
   e.preventDefault();
   const pos = getMousePos(e);
+  const s = getScaledValues();
+  const hitRadius = s.particleFontSize * 1.4;
+
   for (let p of particles) {
-    if (Math.hypot(pos.x - p.x, pos.y - p.y) < 45) {
+    if (Math.hypot(pos.x - p.x, pos.y - p.y) < hitRadius) {
       dragging = p;
+      // Remember where it started so we can snap it back on a miss.
+      dragging.origX = p.x;
+      dragging.origY = p.y;
       return;
     }
   }
@@ -142,15 +227,22 @@ function moveDrag(e) {
 function endDrag(e) {
   if (!dragging) return;
   const pos = getMousePos(e);
+  const s = getScaledValues();
   let dropped = false;
 
   nouns.forEach(n => {
     const x = n.baseX * canvas.width;
     const y = n.baseY * canvas.height;
-    const s = getScaledValues();
 
     if (pos.x > x && pos.x < x + s.slotW && pos.y > y && pos.y < y + s.slotH) {
+      // If this slot already has a particle in it, give that one back to the pool
+      // instead of losing it.
+      if (n.placed) {
+        returnToPool(n.placed);
+      }
       n.placed = { text: dragging.text, color: dragging.color };
+      n.status = null; // clear any previous correct/wrong marking for this slot
+      document.getElementById(n.hintId).style.display = "none";
       dropped = true;
     }
   });
@@ -158,7 +250,9 @@ function endDrag(e) {
   if (dropped) {
     particles = particles.filter(p => p !== dragging);
   } else {
-    dragging.x = particles.find(p => p.text === dragging.text)?.x || dragging.x;
+    // Snap back to where it was picked up from.
+    dragging.x = dragging.origX;
+    dragging.y = dragging.origY;
   }
 
   dragging = null;
@@ -175,7 +269,7 @@ canvas.addEventListener('touchstart', startDrag, {passive: false});
 canvas.addEventListener('touchmove', moveDrag, {passive: false});
 canvas.addEventListener('touchend', endDrag, {passive: false});
 
-// Check Answers - Fixed Version
+// Check Answers
 function checkAnswers() {
   let correctCount = 0;
 
@@ -193,12 +287,14 @@ function checkAnswers() {
     feedback.innerHTML = "🎉 བཀྲ་ཤིས་བདེ་ལེགས། All correct! Excellent!";
     feedback.className = "correct";
     if (nextBtn) nextBtn.style.display = "inline-block";
+    playCorrectSound();
   } else {
     feedback.textContent = `${correctCount}/${nouns.length} correct. Try again!`;
     feedback.className = "";
     if (nextBtn) nextBtn.style.display = "none";
+    playWrongSound();
   }
-  
+
   draw();
 }
 
@@ -207,7 +303,7 @@ function resetGame() {
     n.placed = null;
     n.status = null;
   });
-  
+
   resetParticles();
   document.getElementById('feedback').innerHTML = '';
   document.querySelectorAll('.hint').forEach(h => h.style.display = 'none');
