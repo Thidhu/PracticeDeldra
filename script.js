@@ -313,7 +313,7 @@ function resetGame() {
 }
 
 function goToNextLevel() {
-  window.location.href = "https://wordwall.net/play/113469/967/829";   // ← Change this to your next level
+  window.location.href = "https://thidhu.github.io/Dreldra_Simex/";   // ← Change this to your next level
 }
 
 // Initialize
