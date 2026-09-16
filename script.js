@@ -8,25 +8,14 @@ function resizeCanvas() {
   canvas.height = Math.max(520, containerWidth * 0.68);
 }
 
-// ---------------------------------------------------------------------
 // Data
-// NOTE: "rule" is a short, teacher-editable explanation shown as a
-// progressive hint after a couple of wrong tries. Edit these to match
-// exactly how you teach the rule in class — I've kept them generic.
-// ---------------------------------------------------------------------
 let nouns = [
-  {text: "མི་", expected: "གི་", baseX: 0.12, baseY: 0.22, placed: null, status: null, hintId: "hint1",
-   rule: "མི་ ends in a letter that takes གི་.", attempts: 0},
-  {text: "སློབ་དཔོན་", expected: "གྱི་", baseX: 0.42, baseY: 0.22, placed: null, status: null, hintId: "hint2",
-   rule: "སློབ་དཔོན་ ends in a letter that takes གྱི་.", attempts: 0},
-  {text: "དུས་ཚོད་", expected: "ཀྱི་", baseX: 0.72, baseY: 0.22, placed: null, status: null, hintId: "hint3",
-   rule: "དུས་ཚོད་ ends in a letter that takes ཀྱི་.", attempts: 0},
-  {text: "བླམ་", expected: "གི་", baseX: 0.12, baseY: 0.52, placed: null, status: null, hintId: "hint4",
-   rule: "བླམ་ ends in a letter that takes གི་.", attempts: 0},
-  {text: "རྒྱལ་པོ", expected: "འི་", baseX: 0.42, baseY: 0.52, placed: null, status: null, hintId: "hint5",
-   rule: "རྒྱལ་པོ ends in a vowel, so it takes འི་.", attempts: 0},
-  {text: "མེ་ཏོག་", expected: "གི་", baseX: 0.72, baseY: 0.52, placed: null, status: null, hintId: "hint6",
-   rule: "མེ་ཏོག་ ends in a letter that takes གི་.", attempts: 0}
+  {text: "མི་", expected: "གི་", baseX: 0.12, baseY: 0.22, placed: null, status: null, hintId: "hint1"},
+  {text: "སློབ་དཔོན་", expected: "གྱི་", baseX: 0.42, baseY: 0.22, placed: null, status: null, hintId: "hint2"},
+  {text: "དུས་ཚོད་", expected: "ཀྱི་", baseX: 0.72, baseY: 0.22, placed: null, status: null, hintId: "hint3"},
+  {text: "བླམ་", expected: "གི་", baseX: 0.12, baseY: 0.52, placed: null, status: null, hintId: "hint4"},
+  {text: "རྒྱལ་པོ", expected: "འི་", baseX: 0.42, baseY: 0.52, placed: null, status: null, hintId: "hint5"},
+  {text: "མེ་ཏོག་", expected: "གི་", baseX: 0.72, baseY: 0.52, placed: null, status: null, hintId: "hint6"}
 ];
 
 const particleData = [
@@ -40,105 +29,7 @@ const particleData = [
 
 let particles = [];
 
-// Progress tracking for the new features
-let score = 0;
-let streak = 0;
-let maxStreak = 0;
-let mistakes = 0;
-
-// ---------------------------------------------------------------------
-// Dynamically-created UI (no HTML edits needed): status bar with
-// mascot + score + streak, and a star rating shown on completion.
-// ---------------------------------------------------------------------
-let mascotEl, scoreEl, streakEl, starsEl;
-
-function ensureStatusBar() {
-  if (document.getElementById('gameStatusBar')) {
-    mascotEl = document.getElementById('gameMascot');
-    scoreEl = document.getElementById('gameScore');
-    streakEl = document.getElementById('gameStreak');
-    starsEl = document.getElementById('gameStars');
-    return;
-  }
-
-  const bar = document.createElement('div');
-  bar.id = 'gameStatusBar';
-  bar.style.cssText = 'display:flex;align-items:center;gap:20px;font-family:sans-serif;font-size:20px;margin-bottom:10px;flex-wrap:wrap;';
-  bar.innerHTML = `
-    <span id="gameMascot" style="font-size:36px;transition:transform 0.15s;">🙂</span>
-    <span id="gameScore" style="font-weight:bold;">Score: 0</span>
-    <span id="gameStreak">🔥 Streak: 0</span>
-    <span id="gameStars" style="font-size:22px;"></span>
-  `;
-  canvas.parentNode.insertBefore(bar, canvas);
-
-  mascotEl = document.getElementById('gameMascot');
-  scoreEl = document.getElementById('gameScore');
-  streakEl = document.getElementById('gameStreak');
-  starsEl = document.getElementById('gameStars');
-}
-
-function setMascot(emoji) {
-  if (!mascotEl) return;
-  mascotEl.textContent = emoji;
-  mascotEl.style.transform = 'scale(1.3)';
-  setTimeout(() => { mascotEl.style.transform = 'scale(1)'; }, 150);
-}
-
-function updateStatusBar() {
-  if (scoreEl) scoreEl.textContent = `Score: ${score}`;
-  if (streakEl) streakEl.textContent = `🔥 Streak: ${streak}`;
-}
-
-// ---------------------------------------------------------------------
-// Confetti (self-contained, injects its own CSS + DOM elements)
-// ---------------------------------------------------------------------
-function ensureConfettiStyle() {
-  if (document.getElementById('confettiStyle')) return;
-  const style = document.createElement('style');
-  style.id = 'confettiStyle';
-  style.textContent = `
-    @keyframes confettiFall {
-      0%   { transform: translateY(-10px) rotate(0deg); opacity: 1; }
-      100% { transform: translateY(420px) rotate(360deg); opacity: 0; }
-    }
-    .confetti-piece {
-      position: absolute;
-      top: 0;
-      width: 10px;
-      height: 10px;
-      pointer-events: none;
-      animation: confettiFall 1.6s ease-in forwards;
-      z-index: 9999;
-    }
-  `;
-  document.head.appendChild(style);
-}
-
-function launchConfetti() {
-  ensureConfettiStyle();
-  const colors = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#e91e63'];
-  const rect = canvas.getBoundingClientRect();
-  const container = document.createElement('div');
-  container.style.cssText = `position:absolute; left:${rect.left + window.scrollX}px; top:${rect.top + window.scrollY}px; width:${rect.width}px; height:${rect.height}px; overflow:visible; pointer-events:none;`;
-  document.body.appendChild(container);
-
-  for (let i = 0; i < 60; i++) {
-    const piece = document.createElement('div');
-    piece.className = 'confetti-piece';
-    piece.style.left = Math.random() * rect.width + 'px';
-    piece.style.background = colors[Math.floor(Math.random() * colors.length)];
-    piece.style.animationDelay = (Math.random() * 0.3) + 's';
-    piece.style.borderRadius = Math.random() < 0.5 ? '50%' : '2px';
-    container.appendChild(piece);
-  }
-
-  setTimeout(() => container.remove(), 2200);
-}
-
-// ---------------------------------------------------------------------
-// Background music toggle
-// ---------------------------------------------------------------------
+// ---------- Background music toggle ----------
 const bgMusic = document.getElementById('bgMusic');
 let musicPlaying = false;
 
@@ -157,9 +48,7 @@ function toggleMusic() {
   }
 }
 
-// ---------------------------------------------------------------------
-// Sound effects (Web Audio API, no external files needed)
-// ---------------------------------------------------------------------
+// ---------- Sound effects (Web Audio API, no external files needed) ----------
 let audioCtx = null;
 function getAudioCtx() {
   if (!audioCtx) {
@@ -203,19 +92,6 @@ function playWrongSound() {
     const now = ac.currentTime;
     playTone(220, now, 0.18, 'sawtooth', 0.15);
     playTone(160, now + 0.12, 0.22, 'sawtooth', 0.15);
-  } catch (e) {
-    console.warn('Audio playback failed:', e);
-  }
-}
-
-function playFanfare() {
-  try {
-    const ac = getAudioCtx();
-    const now = ac.currentTime;
-    playTone(523.25, now, 0.15, 'triangle');
-    playTone(659.25, now + 0.15, 0.15, 'triangle');
-    playTone(783.99, now + 0.30, 0.15, 'triangle');
-    playTone(1046.50, now + 0.45, 0.4, 'triangle');
   } catch (e) {
     console.warn('Audio playback failed:', e);
   }
@@ -346,85 +222,11 @@ function moveDrag(e) {
   draw();
 }
 
-// ---------------------------------------------------------------------
-// Instant per-drop feedback + progressive hints + streak/score/mascot
-// ---------------------------------------------------------------------
-function evaluateSlot(n) {
-  const isCorrect = n.placed && n.placed.text === n.expected;
-  n.status = isCorrect ? 'correct' : 'wrong';
-  const hintEl = document.getElementById(n.hintId);
-
-  if (isCorrect) {
-    hintEl.style.display = "none";
-    n.attempts = 0;
-    score += 10 + Math.min(streak, 5) * 2; // small streak bonus
-    streak += 1;
-    maxStreak = Math.max(maxStreak, streak);
-    setMascot(streak >= 3 ? '🤩' : '😊');
-    playCorrectSound();
-  } else {
-    n.attempts += 1;
-    mistakes += 1;
-    streak = 0;
-    setMascot('😕');
-    playWrongSound();
-
-    // Progressive hint ladder:
-    // 1st miss: just the red highlight, no extra text.
-    // 2nd miss: show the rule.
-    // 3rd+ miss: show the rule AND the correct answer.
-    if (n.attempts === 1) {
-      hintEl.style.display = "none";
-    } else if (n.attempts === 2) {
-      hintEl.textContent = n.rule;
-      hintEl.style.display = "block";
-    } else {
-      hintEl.textContent = `${n.rule} (Answer: ${n.expected})`;
-      hintEl.style.display = "block";
-    }
-  }
-
-  updateStatusBar();
-  maybeFinishIfComplete();
-}
-
-function maybeFinishIfComplete() {
-  const allPlaced = nouns.every(n => n.placed);
-  if (!allPlaced) return;
-  const allCorrect = nouns.every(n => n.status === 'correct');
-  if (allCorrect) {
-    finishGame();
-  }
-}
-
-function computeStars() {
-  // 3 stars: no mistakes at all. 2 stars: a few. 1 star: many.
-  if (mistakes === 0) return 3;
-  if (mistakes <= nouns.length) return 2;
-  return 1;
-}
-
-function finishGame() {
-  const feedback = document.getElementById('feedback');
-  const nextBtn = document.getElementById('nextLevelBtn');
-  const stars = computeStars();
-
-  feedback.innerHTML = "🎉 བཀྲ་ཤིས་བདེ་ལེགས། All correct! Excellent!";
-  feedback.className = "correct";
-  if (starsEl) starsEl.textContent = '⭐'.repeat(stars) + '☆'.repeat(3 - stars);
-  if (nextBtn) nextBtn.style.display = "inline-block";
-
-  setMascot('🎉');
-  playFanfare();
-  launchConfetti();
-}
-
 function endDrag(e) {
   if (!dragging) return;
   const pos = getMousePos(e);
   const s = getScaledValues();
   let dropped = false;
-  let droppedInto = null;
 
   nouns.forEach(n => {
     const x = n.baseX * canvas.width;
@@ -437,8 +239,9 @@ function endDrag(e) {
         returnToPool(n.placed);
       }
       n.placed = dragging; // keep the full object (with homeX/homeY) so it can be returned later
+      n.status = null;
+      document.getElementById(n.hintId).style.display = "none";
       dropped = true;
-      droppedInto = n;
     }
   });
 
@@ -452,12 +255,6 @@ function endDrag(e) {
 
   dragging = null;
   draw();
-
-  // Instant feedback the moment a particle lands in a slot.
-  if (droppedInto) {
-    evaluateSlot(droppedInto);
-    draw();
-  }
 }
 
 // Event Listeners
@@ -470,23 +267,30 @@ canvas.addEventListener('touchstart', startDrag, {passive: false});
 canvas.addEventListener('touchmove', moveDrag, {passive: false});
 canvas.addEventListener('touchend', endDrag, {passive: false});
 
-// Manual "Check Answers" button still works as a summary / for slots
-// that were placed silently (kept for backward compatibility with your
-// existing HTML button).
+// Check Answers
 function checkAnswers() {
+  let correctCount = 0;
+
   nouns.forEach(n => {
-    if (n.placed && n.status === null) {
-      evaluateSlot(n);
-    }
+    const isCorrect = n.placed && n.placed.text === n.expected;
+    n.status = isCorrect ? 'correct' : 'wrong';
+    if (isCorrect) correctCount++;
+    document.getElementById(n.hintId).style.display = isCorrect ? "none" : "block";
   });
 
-  const correctCount = nouns.filter(n => n.status === 'correct').length;
-  if (correctCount < nouns.length) {
-    const feedback = document.getElementById('feedback');
-    const nextBtn = document.getElementById('nextLevelBtn');
+  const feedback = document.getElementById('feedback');
+  const nextBtn = document.getElementById('nextLevelBtn');
+
+  if (correctCount === nouns.length) {
+    feedback.innerHTML = "🎉 བཀྲ་ཤིས་བདེ་ལེགས། All correct! Excellent!";
+    feedback.className = "correct";
+    if (nextBtn) nextBtn.style.display = "inline-block";
+    playCorrectSound();
+  } else {
     feedback.textContent = `${correctCount}/${nouns.length} correct. Try again!`;
     feedback.className = "";
     if (nextBtn) nextBtn.style.display = "none";
+    playWrongSound();
   }
 
   draw();
@@ -496,16 +300,7 @@ function resetGame() {
   nouns.forEach(n => {
     n.placed = null;
     n.status = null;
-    n.attempts = 0;
   });
-
-  score = 0;
-  streak = 0;
-  maxStreak = 0;
-  mistakes = 0;
-  updateStatusBar();
-  if (starsEl) starsEl.textContent = '';
-  setMascot('🙂');
 
   resetParticles();
   document.getElementById('feedback').innerHTML = '';
@@ -522,9 +317,7 @@ function goToNextLevel() {
 // Initialize
 window.onload = () => {
   resizeCanvas();
-  ensureStatusBar();
   resetParticles();
-  updateStatusBar();
   draw();
 };
 
