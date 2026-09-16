@@ -54,7 +54,6 @@ function getAudioCtx() {
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   }
-  // Some browsers start contexts suspended until a user gesture; resume defensively.
   if (audioCtx.state === 'suspended') audioCtx.resume();
   return audioCtx;
 }
@@ -80,7 +79,6 @@ function playCorrectSound() {
   try {
     const ac = getAudioCtx();
     const now = ac.currentTime;
-    // Bright ascending two-note chime
     playTone(523.25, now, 0.15, 'triangle');        // C5
     playTone(783.99, now + 0.12, 0.25, 'triangle');  // G5
   } catch (e) {
@@ -92,7 +90,6 @@ function playWrongSound() {
   try {
     const ac = getAudioCtx();
     const now = ac.currentTime;
-    // Low descending buzz
     playTone(220, now, 0.18, 'sawtooth', 0.15);
     playTone(160, now + 0.12, 0.22, 'sawtooth', 0.15);
   } catch (e) {
@@ -109,22 +106,24 @@ function shuffle(array) {
   return array;
 }
 
+// Build the pool with a FIXED home position per particle, so a returned
+// particle always goes back to the exact spot it started at instead of a
+// recalculated slot that can overlap another particle.
 function resetParticles() {
   const slotWidth = canvas.width / 7;
   const shuffled = shuffle([...particleData]);
-  particles = shuffled.map((p, i) => ({
-    ...p,
-    x: slotWidth * (1.2 + i),
-    y: canvas.height * 0.82
-  }));
+  particles = shuffled.map((p, i) => {
+    const homeX = slotWidth * (1.2 + i);
+    const homeY = canvas.height * 0.82;
+    return { ...p, x: homeX, y: homeY, homeX, homeY };
+  });
 }
 
-// Puts a particle back into the pool row (used when a filled slot gets overwritten)
+// Puts a particle back into the pool at ITS OWN home position.
 function returnToPool(item) {
-  const slotWidth = canvas.width / 7;
-  const x = slotWidth * (1.2 + particles.length);
-  const y = canvas.height * 0.82;
-  particles.push({ text: item.text, color: item.color, x, y });
+  item.x = item.homeX;
+  item.y = item.homeY;
+  particles.push(item);
 }
 
 function getScaledValues() {
@@ -208,7 +207,6 @@ function startDrag(e) {
   for (let p of particles) {
     if (Math.hypot(pos.x - p.x, pos.y - p.y) < hitRadius) {
       dragging = p;
-      // Remember where it started so we can snap it back on a miss.
       dragging.origX = p.x;
       dragging.origY = p.y;
       return;
@@ -235,13 +233,13 @@ function endDrag(e) {
     const y = n.baseY * canvas.height;
 
     if (pos.x > x && pos.x < x + s.slotW && pos.y > y && pos.y < y + s.slotH) {
-      // If this slot already has a particle in it, give that one back to the pool
-      // instead of losing it.
+      // If this slot already has a particle, give it back to its own home spot
+      // in the pool instead of losing it.
       if (n.placed) {
         returnToPool(n.placed);
       }
-      n.placed = { text: dragging.text, color: dragging.color };
-      n.status = null; // clear any previous correct/wrong marking for this slot
+      n.placed = dragging; // keep the full object (with homeX/homeY) so it can be returned later
+      n.status = null;
       document.getElementById(n.hintId).style.display = "none";
       dropped = true;
     }
