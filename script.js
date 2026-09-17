@@ -35,7 +35,7 @@
   </div>
 <!-- Background Music -->
   <audio id="bgMusic" loop>
-    <source src="background-music.mp3" type="audio/mpeg">
+    <source src="bgsound.mp3" type="audio/mpeg">
     Your browser does not support the audio element.
   </audio>
 
